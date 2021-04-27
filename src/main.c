@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 #include <utime.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 void change_parameters();
 char *source_path;
@@ -22,6 +23,7 @@ int size;
 char *target_path;
 int sleep_time;
 DIR *opendir();
+bool recursive = false;
 
 
 int check_directory (const char *d)
@@ -131,7 +133,6 @@ void change_parameters(char *source_path, char *target_path)
 }
 
 void synchronize(char *source_path, char *target_path){
-	//printf("cokolwiek %s", source_path);
 	DIR *d = opendir(source_path);
 	struct dirent *dir;
 	if(check_directory(source_path) == 0 && check_directory(target_path) == 0){
@@ -139,11 +140,56 @@ void synchronize(char *source_path, char *target_path){
 			if(strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0){
 				continue;
 			}
-			if(check_directory(join_paths(source_path, dir->d_name)) == 0){
+			char *joined_source_path = join_paths(source_path, dir->d_name);
+			char *joined_target_path = join_paths(target_path, dir->d_name);
+			if(check_directory(joined_source_path) == 0 && !recursive){
 				continue;
 			}
-			size = get_size(dir->d_name);
-			copy(join_paths(source_path, dir->d_name), join_paths(target_path, dir->d_name), size);
+			if(check_directory(joined_source_path) == 0 ){
+				mkdir(joined_target_path , get_chmod(joined_source_path));
+				synchronize(joined_source_path, joined_target_path);
+			}
+			else{
+				size = get_size(dir->d_name);
+				copy(joined_source_path, joined_target_path, size);
+			}
+		}
+	}
+	else{
+		exit(EXIT_FAILURE);
+	}
+
+}
+
+void delete(char *source_path, char *target_path, int recurence){
+	DIR *d = opendir(target_path);
+	struct dirent *dir;
+	if((check_directory(source_path) == 0 && check_directory(target_path) == 0) || recurence){
+
+		printf("to jest recursive w synhro %d \n", recursive);
+		while((dir = readdir(d))){
+			if(strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0){
+				continue;
+			}
+			char *joined_source_path = join_paths(source_path, dir->d_name);
+			char *joined_target_path = join_paths(target_path, dir->d_name);
+			if(check_directory(joined_target_path) == 0 && !recursive){
+				printf("111\n");
+				continue;
+			}
+			if(check_directory(joined_target_path) == 0){
+				printf("222\n");
+				delete(joined_source_path, joined_target_path, 1);
+				printf("Jestem po delete\n");
+				if(check_directory(joined_source_path) == -1){
+					rmdir(joined_target_path);
+					printf("555\n");
+				}
+			}
+			else if(check_directory(joined_source_path) == -1){
+				printf("333\n");
+				remove(joined_target_path);
+			}
 		}
 	}
 	else{
@@ -171,7 +217,6 @@ void on_signal(int sig)
 void demon(){
 	pid_t pid;
 	pid = fork();
-	printf("pid = %jd\n", (intmax_t)pid);
 	if (pid < 0) {
 		exit(EXIT_FAILURE);
 	}
@@ -193,17 +238,19 @@ void demon(){
 
 
 int main (int argc, char *argv[]) {
-
 	source_path = argv[1];
 	target_path = argv[2];
-	demon();
+	if(argc == 4){
+		recursive = (strcmp(argv[3], "-R") == 0);
+	}
+	//demon();
 	while(1){
+		delete(source_path, target_path, 0);
 		synchronize(source_path, target_path);
-		sleep(300);
+		sleep(60);
 	}
 	//size = get_size(source_path);
 	//copy(source_path, target_path, size);
-	printf("%s %s\n", source_path, target_path);
 	return EXIT_SUCCESS;
 }
 
