@@ -1,5 +1,5 @@
-#define _BSD_SOURCE
-#define _GNU_SOURCE
+//#define _BSD_SOURCE
+//#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,15 +16,16 @@
 #include <utime.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <errno.h>
 
 void change_parameters();
 char *source_path;
 int size;
 char *target_path;
-int sleep_time;
+int sleep_time = 300;
 DIR *opendir();
 bool recursive = false;
-int map_copy_size = 35000;
+int map_copy_size = 350;
 
 
 int check_directory (const char *d)
@@ -110,6 +111,7 @@ off_t get_size(char *source_path)
     {
         return size.st_size;
     }
+	syslog(LOG_INFO, "Error %d", errno);
     return -1;
 }
 
@@ -173,9 +175,10 @@ void synchronize(char *source_path, char *target_path){
 			}
 			else{
 				syslog(LOG_INFO, "File copied %s", joined_target_path);
-				size = get_size(dir->d_name);
-				if(size < map_copy_size )
+				size = get_size(joined_source_path);
+				if(size < map_copy_size ){
 					copy(joined_source_path, joined_target_path, size);
+				}
 				else{
 					map_copy(joined_source_path, joined_target_path, size);
 				}
@@ -203,12 +206,12 @@ void delete(char *source_path, char *target_path, int recurence){
 			}
 			if(check_directory(joined_target_path) == 0){
 				delete(joined_source_path, joined_target_path, 1);
-				if(check_directory(joined_source_path) == -1){
+				if(check_directory(joined_source_path) == -1 || (check_directory(joined_source_path) != check_directory(joined_target_path))){
 					syslog(LOG_INFO, "Directory deleted %s", joined_target_path);
 					rmdir(joined_target_path);
 				}
 			}
-			else if(check_directory(joined_source_path) == -1){
+			else if(check_directory(joined_source_path) == -1 || (check_directory(joined_source_path) != check_directory(joined_target_path))){
 				syslog(LOG_INFO, "File deleted %s", joined_target_path);
 				remove(joined_target_path);
 			}
@@ -266,14 +269,37 @@ void demon(){
 int main (int argc, char *argv[]) {
 	source_path = argv[1];
 	target_path = argv[2];
+	// ./main <source_directory> <target_directory> (-R -T <sleep_time> -M <map_copy_size>) <- it works in any order
+	// basic sleep_time = 300(seconds), map_copy_size = 35000(bytes)
+	for(int i=3;i<argc;i++){
+		if(strcmp(argv[i], "-R") == 0){
+			recursive = true;
+		}
+		if(strcmp(argv[i], "-T") == 0){
+			if(i+1<argc){
+				sleep_time = atoi(argv[i+1]);
+				if(sleep_time == 0){
+					sleep_time = 300;
+				}
+			}
+		}
+		if(strcmp(argv[i], "-M") == 0){
+			if(i+1<argc){
+				map_copy_size = atoi(argv[i+1]);
+				if(map_copy_size == 0){
+					map_copy_size = 35000;
+				}
+			}
+		}
+	}
 	if(argc == 4){
 		recursive = (strcmp(argv[3], "-R") == 0);
 	}
-	demon();
+	//demon();
 	while(1){
 		delete(source_path, target_path, 0);
 		synchronize(source_path, target_path);
-		sleep(60);
+		sleep(sleep_time);
 	}
 	return EXIT_SUCCESS;
 }
