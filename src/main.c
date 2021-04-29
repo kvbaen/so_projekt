@@ -1,5 +1,3 @@
-//#define _BSD_SOURCE
-//#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,32 +16,69 @@
 #include <stdbool.h>
 #include <errno.h>
 
-void change_parameters();
 char *source_path;
-int size;
 char *target_path;
-int sleep_time = 300;
-DIR *opendir();
+int size;
 bool recursive = false;
 int map_copy_size = 350;
+int sleep_time = 300;
+DIR *opendir();
 
+mode_t get_chmod(char *source_path)
+{
+    struct stat mod;
+    if(stat(source_path, &mod)==-1)
+    {
+        syslog(LOG_ERR, "Error getting access settings for a file %s", source_path);
+        exit(EXIT_FAILURE);
+    }
+    return mod.st_mode;
+}
+
+time_t get_time(char* source_path)
+{
+    struct stat time;
+    if(stat(source_path, &time) == -1)
+    {
+        syslog(LOG_ERR, "Error getting modification date for a file %s!", source_path);
+        exit(EXIT_FAILURE);
+    }
+    return time.st_mtim.tv_sec;
+}
+
+void change_parameters(char *source_path, char *target_path)
+{
+    struct utimbuf new;
+    new.actime = 0;
+    new.modtime = get_time(source_path);
+    if(utime(target_path, &new) != 0)
+    {
+        syslog(LOG_ERR, "Error related to modification date!");
+        exit(EXIT_FAILURE);
+    }
+    mode_t old = get_chmod(source_path);
+    if(chmod(target_path, old)!=0)
+    {
+        syslog(LOG_ERR, "File permission setting error!!");
+        exit(EXIT_FAILURE);
+    }
+}
 
 int check_directory (const char *d)
 {
     DIR *dirptr;
 
     if (access ( d, F_OK ) != -1 ) {
-        // file exists
         if ((dirptr = opendir (d)) != NULL) {
             closedir (dirptr);
         } else {
-            return -2; /* d exists but is not a directory */
+            return -2;
         }
     } else {
-        return -1;  /* d does not exist */
+        return -1;
     }
 
-    return 0; //directory
+    return 0;
 }
 
 char *join_paths(char *directory_path, char *file_path){
@@ -115,46 +150,6 @@ off_t get_size(char *source_path)
     return -1;
 }
 
-mode_t get_chmod(char *source_path)
-{
-    struct stat mod;
-    if(stat(source_path, &mod)==-1)
-    {
-        syslog(LOG_ERR, "Error getting access settings for a file %s", source_path);
-        exit(EXIT_FAILURE);
-    }
-    return mod.st_mode;
-}
-
-time_t get_time(char* source_path)
-{
-    struct stat time;
-    if(stat(source_path, &time) == -1)
-    {
-        syslog(LOG_ERR, "Error getting modification date for a file %s!", source_path);
-        exit(EXIT_FAILURE);
-    }
-    return time.st_mtim.tv_sec;
-}
-
-void change_parameters(char *source_path, char *target_path)
-{
-    struct utimbuf new;
-    new.actime = 0;
-    new.modtime = get_time(source_path);
-    if(utime(target_path, &new) != 0)
-    {
-        syslog(LOG_ERR, "Error related to modification date!");
-        exit(EXIT_FAILURE);
-    }
-    mode_t old = get_chmod(source_path);
-    if(chmod(target_path, old)!=0)
-    {
-        syslog(LOG_ERR, "File permission setting error!!");
-        exit(EXIT_FAILURE);
-    }
-}
-
 void synchronize(char *source_path, char *target_path){
 	DIR *d = opendir(source_path);
 	struct dirent *dir;
@@ -188,7 +183,6 @@ void synchronize(char *source_path, char *target_path){
 	else{
 		exit(EXIT_FAILURE);
 	}
-
 }
 
 void delete(char *source_path, char *target_path, int recurence){
@@ -220,7 +214,6 @@ void delete(char *source_path, char *target_path, int recurence){
 	else{
 		exit(EXIT_FAILURE);
 	}
-
 }
 
 void on_signal(int sig)
@@ -243,7 +236,6 @@ void on_signal(int sig)
     signal(sig, on_signal);
 }
 
-
 void demon(){
 	pid_t pid;
 	pid = fork();
@@ -264,7 +256,6 @@ void demon(){
 	close(STDERR_FILENO);
 
 }
-
 
 int main (int argc, char *argv[]) {
 	source_path = argv[1];
@@ -292,10 +283,7 @@ int main (int argc, char *argv[]) {
 			}
 		}
 	}
-	if(argc == 4){
-		recursive = (strcmp(argv[3], "-R") == 0);
-	}
-	//demon();
+	demon();
 	while(1){
 		delete(source_path, target_path, 0);
 		synchronize(source_path, target_path);
