@@ -260,8 +260,19 @@ void demon(){
 int main (int argc, char *argv[]) {
 	source_path = argv[1];
 	target_path = argv[2];
-	// ./main <source_directory> <target_directory> (-R -T <sleep_time> -M <map_copy_size>) <- it works in any order
-	// basic sleep_time = 300(seconds), map_copy_size = 35000(bytes)
+	if (argc == 2)
+    {
+        if (strcmp(argv[1], "--help") == 0)
+        {
+            printf("./main source_directory target_directory [-T] [custom_sleep_time_in_seconds] [-M] [custom_size_for_copy_with_map_in_bytes] [-R]\n \nArguments such as [-T] [custom_sleep_time_in_seconds] [-M] [custom_size_for_copy_with_map_in_bytes] [-R] can be written in different order.\n\nDefault parameters sleep_time = 300(seconds), map_copy_size = 35000(bytes).\n");
+            exit(EXIT_FAILURE);	
+        }
+        else
+        {
+            printf("Unknown argument. Enter ./main --help for help.\n");
+            exit(EXIT_FAILURE);	
+        }
+    }
 	for(int i=3;i<argc;i++){
 		if(strcmp(argv[i], "-R") == 0){
 			recursive = true;
